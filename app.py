@@ -4,7 +4,7 @@ from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled
 import re
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/api/*": {"origins": ["http://localhost:5000", "https://yourdomain.com"]}})
 
 def extract_video_id(url):
     match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11})", url)
