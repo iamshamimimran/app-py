@@ -23,14 +23,17 @@ def get_transcript():
         return jsonify({"error": "Invalid YouTube URL"}), 400
 
     try:
+        # Fetch transcript list
         transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+
+        # Try prioritizing English if available
         try:
             transcript = transcript_list.find_transcript(['en', 'en-US'])
         except Exception:
-            transcript = transcript_list.find_transcript(
-                list(transcript_list._manually_created_transcripts.keys()) or
-                list(transcript_list._generated_transcripts.keys())
-            )
+            # Fallback to any transcript (first available)
+            transcript = transcript_list.find_transcript(transcript_list._manually_created_transcripts.keys() or transcript_list._generated_transcripts.keys())
+
+        # Fetch actual transcript data
         transcript_data = transcript.fetch()
         return jsonify(transcript_data)
 
