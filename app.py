@@ -1,10 +1,11 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled
+from youtube_transcript_api._utils import set_proxies
 import re
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": ["*"]}})
+CORS(app)
 
 def extract_video_id(url):
     match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11})", url)
@@ -23,21 +24,26 @@ def get_transcript():
         return jsonify({"error": "Invalid YouTube URL"}), 400
 
     try:
-        # Fetch transcript list
+        set_proxies({
+            'http': 'http://158.255.77.169:80',
+            'https': 'http://158.255.77.169:80'
+        })
+
         transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
 
-        # Try prioritizing English if available
         try:
             transcript = transcript_list.find_transcript(['en', 'en-US'])
         except Exception:
-            # Fallback to any transcript (first available)
-            transcript = transcript_list.find_transcript(transcript_list._manually_created_transcripts.keys() or transcript_list._generated_transcripts.keys())
+            transcript = transcript_list.find_transcript(
+                transcript_list._manually_created_transcripts.keys() or
+                transcript_list._generated_transcripts.keys()
+            )
 
-        # Fetch actual transcript data
         transcript_data = transcript.fetch()
         return jsonify(transcript_data)
 
     except TranscriptsDisabled:
         return jsonify({"error": "Transcripts are disabled for this video"}), 403
     except Exception as e:
+        print("Transcript Fetch Error:", e)
         return jsonify({"error": str(e)}), 500
