@@ -24,12 +24,14 @@ def get_transcript():
         return jsonify({"error": "Invalid YouTube URL"}), 400
 
     try:
-        set_proxies({
-            'http': 'http://158.255.77.169:80',
-            'https': 'http://158.255.77.169:80'
-        })
-
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+        # ✅ Use proxies directly in API call
+        transcript_list = YouTubeTranscriptApi.list_transcripts(
+            video_id,
+            proxies={
+                'http': 'http://138.201.5.46:3128',
+                'https': 'http://138.201.5.46:3128'
+            }
+        )
 
         try:
             transcript = transcript_list.find_transcript(['en', 'en-US'])
@@ -45,5 +47,5 @@ def get_transcript():
     except TranscriptsDisabled:
         return jsonify({"error": "Transcripts are disabled for this video"}), 403
     except Exception as e:
-        print("Transcript Fetch Error:", e)
         return jsonify({"error": str(e)}), 500
+
