@@ -1,14 +1,30 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled
+from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
+from youtube_transcript_api._utils import set_proxies
 import re
+import requests
+import random
+from time import sleep
 
 app = Flask(__name__)
 CORS(app)
 
-def extract_video_id(url):
+# List of free proxies to rotate through
+PROXY_LIST = [
+    {'http': 'http://51.81.245.3:17981', 'https': 'https://51.81.245.3:17981'},
+    {'http': 'http://45.136.25.60:8085', 'https': 'https://45.136.25.60:8085'},
+    # Add more proxies as needed
+]
+
+# Extracts the YouTube video ID from a URL
+def extract_video_id(url: str) -> str | None:
     match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11})", url)
     return match.group(1) if match else None
+
+# Fetches a random proxy from the list
+def get_random_proxy() -> dict:
+    return random.choice(PROXY_LIST)
 
 @app.route("/api/get-transcript", methods=["POST"])
 def get_transcript():
@@ -22,24 +38,30 @@ def get_transcript():
     if not video_id:
         return jsonify({"error": "Invalid YouTube URL"}), 400
 
-    try:
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-
+    # Attempt to fetch the transcript using a proxy
+    for _ in range(3):  # Retry up to 3 times
+        proxy = get_random_proxy()
         try:
-            transcript = transcript_list.find_transcript(['en', 'en-US'])
-        except Exception:
-            # Fall back to any available transcript
-            transcripts = list(transcript_list._manually_created_transcripts.values()) or \
-                          list(transcript_list._generated_transcripts.values())
-            if transcripts:
-                transcript = transcripts[0]
-            else:
-                return jsonify({"error": "No transcript available"}), 404
+            set_proxies(proxy)
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
 
-        transcript_data = transcript.fetch()
-        return jsonify(transcript_data)
+            try:
+                transcript = transcript_list.find_transcript(['en', 'en-US'])
+            except NoTranscriptFound:
+                transcript = transcript_list.find_transcript(
+                    [t.language_code for t in transcript_list.transcripts]
+                )
 
-    except TranscriptsDisabled:
-        return jsonify({"error": "Transcripts are disabled for this video"}), 403
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+            transcript_data = transcript.fetch()
+            return jsonify(transcript_data)
+
+        except (TranscriptsDisabled, NoTranscriptFound) as e:
+            return jsonify({"error": str(e)}), 403
+        except Exception as e:
+            print(f"Error with proxy {proxy}: {e}")
+            sleep(2)  # Wait before retrying with a different proxy
+
+    return jsonify({"error": "Failed to fetch transcript after multiple attempts"}), 500
+
+if __name__ == "__main__":
+    app.run(debug=True)
